@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Qingping Device List</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f9f9f9;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        #description {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #555;
+        }
+        #deviceContainer {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        .device-card {
+            border: 1px solid #ddd;
+            padding: 20px;
+            padding-bottom: 60px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            background-color: #fff;
+            width: 100%;
+            max-width: 300px;
+            position: relative;
+            transition: transform 0.2s;
+        }
+        .device-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+        }
+        .device-card h3 {
+            margin: 0;
+            margin-bottom: 10px;
+            font-size: 20px;
+            color: #333;
+        }
+        .device-card p {
+            margin: 5px 0;
+            color: #666;
+        }
+        .device-card button {
+            position: absolute;
+            bottom: 10px;
+            left: 20px;
+            width: calc(100% - 40px);
+            padding: 10px;
+            border: none;
+            border-radius: 5px;
+            background-color: #007bff;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+        .device-card button:hover {
+            background-color: #0056b3;
+        }
+        .input-container {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        .input-container label {
+            font-weight: bold;
+        }
+        .input-container input {
+            padding: 10px;
+            margin: 0 10px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        #fetchButtonContainer {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #fetchButton {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            background-color: #28a745;
+            color: #fff;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            display: inline-block;
+        }
+        #fetchButton:hover {
+            background-color: #218838;
+        }
+        #loadingBar {
+            display: none;
+            margin-left: 10px;
+            border: 4px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 4px solid #007bff;
+            width: 24px;
+            height: 24px;
+            -webkit-animation: spin 2s linear infinite; /* Safari */
+            animation: spin 2s linear infinite;
+        }
+        @-webkit-keyframes spin {
+            0% { -webkit-transform: rotate(0deg); }
+            100% { -webkit-transform: rotate(360deg); }
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        #error {
+            color: red;
+            text-align: center;
+            margin-top: 10px;
+        }
+        #result {
+            margin-top: 20px;
+            white-space: pre-wrap;
+            text-align: center;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>Qingping Device List</h1>
+    <div id="description">
+        <p>To get the App Key and App Secret, visit <a href="https://developer.qingping.co/personal/permissionApply" target="_blank">Qingping Developer Platform</a>.</p>
+    </div>
+    <div id="error"></div>
+    <div class="input-container">
+        <label for="appKey">App Key: </label>
+        <input type="password" id="appKey" placeholder="Enter App Key">
+    </div>
+    <div class="input-container">
+        <label for="appSecret">App Secret: </label>
+        <input type="password" id="appSecret" placeholder="Enter App Secret">
+    </div>
+    <div id="fetchButtonContainer">
+        <button id="fetchButton" onclick="fetchDeviceListHandler()">기기 목록 가져오기</button>
+        <div id="loadingBar"></div>
+    </div>
+    <div id="deviceContainer">
+        <!-- 기기 정보가 여기에 표시됩니다 -->
+    </div>
+    <div id="result"></div>
+
+    <script>
+        let globalToken = null;
+        let globalDevices = [];
+
+        async function getAccessToken(appKey, appSecret) {
+            const response = await fetch('https://oauth.cleargrass.com/oauth2/token', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Authorization': 'Basic ' + btoa(`${appKey}:${appSecret}`)
+                },
+                body: new URLSearchParams({
+                    'grant_type': 'client_credentials',
+                    'scope': 'device_full_access'
+                })
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`Access Token 요청 실패: ${errorText}`);
+            }
+
+            const data = await response.json();
+            return data.access_token;
+        }
+
+        async function fetchDeviceList(token) {
+            const timestamp = Date.now();
+            const response = await fetch(`https://apis.cleargrass.com/v1/apis/devices?timestamp=${timestamp}`, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                }
+            });
+
+            if (!response.ok) {
+                const errorText = await response.text();
+                throw new Error(`기기 목록 요청 실패: ${errorText}`);
+            }
+
+            const data = await response.json();
+            console.log('기기 목록:', data.devices);
+            return data.devices;
+        }
+
+        async function modifyDeviceSettings(token, macAddress) {
+            const timestamp = Date.now();
+
+            const response = await fetch('https://apis.cleargrass.com/v1/apis/devices/settings', {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': 'Bearer ' + token
+                },
+                body: JSON.stringify({
+                    "mac": [macAddress],
+                    "report_interval": 30,
+                    "collect_interval": 15,
+                    "timestamp": timestamp
+                })
+            });
+
+            console.log('응답 상태 코드:', response.status);
+
+            if (response.status === 200) {
+                console.log('설정 변경 성공');
+                return true;
+            } else {
+                console.log('설정 변경 실패');
+                return false;
+            }
+        }
+
+        async function fetchDeviceListHandler() {
+            try {
+                const appKey = document.getElementById('appKey').value;
+                const appSecret = document.getElementById('appSecret').value;
+
+                if (!appKey || !appSecret) {
+                    throw new Error('App Key와 App Secret을 입력하세요');
+                }
+
+                const fetchButton = document.getElementById('fetchButton');
+                const loadingBar = document.getElementById('loadingBar');
+                fetchButton.disabled = true;
+                loadingBar.style.display = 'block';
+
+                globalToken = await getAccessToken(appKey, appSecret);
+                globalDevices = await fetchDeviceList(globalToken);
+                if (globalDevices && globalDevices.length > 0) {
+                    displayDevices(globalDevices);
+                    fetchButton.textContent = '기기 목록 새로고침';
+                } else {
+                    console.error('기기가 없습니다.');
+                }
+
+                loadingBar.style.display = 'none';
+                fetchButton.disabled = false;
+            } catch (error) {
+                console.error(error);
+                document.getElementById('error').textContent = error.message;
+                const fetchButton = document.getElementById('fetchButton');
+                const loadingBar = document.getElementById('loadingBar');
+                loadingBar.style.display = 'none';
+                fetchButton.disabled = false;
+            }
+        }
+
+        function displayDevices(devices) {
+            const container = document.getElementById('deviceContainer');
+            container.innerHTML = ''; // Clear previous content
+            devices.forEach(device => {
+                const card = document.createElement('div');
+                card.className = 'device-card';
+                card.innerHTML = `
+                    <h3>${device.info.name}</h3>
+                    <p><strong>MAC:</strong> ${device.info.mac}</p>
+                    <p><strong>Code:</strong> ${device.info.product.code}</p>
+                    <p><strong>Status:</strong> ${device.info.status.offline ? 'Offline' : 'Online'}</p>
+                    <p><strong>Temperature:</strong> ${device.data.temperature.value} °C</p>
+                    <p><strong>Humidity:</strong> ${device.data.humidity.value} %</p>
+                    <p><strong>PM2.5:</strong> ${device.data.pm25.value} µg/m³</p>
+                    <p><strong>PM10:</strong> ${device.data.pm10.value} µg/m³</p>
+                    <p><strong>CO2:</strong> ${device.data.co2.value} ppm</p>
+                    <p><strong>Battery:</strong> ${device.data.battery.value} %</p>
+                    <p><strong>Report Interval:</strong> ${device.info.setting.report_interval} seconds</p>
+                    <p><strong>Collect Interval:</strong> ${device.info.setting.collect_interval} seconds</p>
+                    <button onclick="modifyAndRefresh('${device.info.mac}', '${globalToken}')">리포트 주기 수정</button>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        async function modifyAndRefresh(macAddress, token) {
+            const success = await modifyDeviceSettings(token, macAddress);
+            if (success) {
+                fetchDeviceListHandler();
+            }
+        }
+    </script>
+</body>
+</html>
